@@ -1,0 +1,277 @@
+
+# EXPERIMENT 8: GENERATIVE ADVERSARIAL NETWORK (GAN)
+# Generate new handwritten digit images using MNIST
+
+# Step 1: Import libraries
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import (
+    Dense, Flatten, Reshape, LeakyReLU,
+    BatchNormalization
+)
+from tensorflow.keras.datasets import mnist
+from tensorflow.keras.optimizers import Adam
+
+print("TensorFlow Version:", tf.__version__)
+print("Libraries Imported Successfully!")
+
+# Step 2: Load the MNIST dataset
+(X_train, y_train), (X_test, y_test) = mnist.load_data()
+
+print("\nDataset Loaded Successfully!")
+print("Training Images:", X_train.shape)
+print("Testing Images:", X_test.shape)
+
+# Step 3: Normalize images to range [-1, 1]
+X_train = X_train.astype("float32")
+X_train = (X_train - 127.5) / 127.5
+
+# Add channel dimension
+X_train = X_train.reshape(-1, 28, 28, 1)
+
+print("\nPreprocessed Dataset Shape:", X_train.shape)
+
+# Step 4: Display real images
+plt.figure(figsize=(8, 4))
+
+for i in range(10):
+    plt.subplot(2, 5, i + 1)
+    plt.imshow(X_train[i].reshape(28, 28), cmap="gray")
+    plt.axis("off")
+
+plt.suptitle("Real MNIST Images")
+plt.tight_layout()
+plt.show()
+
+# Step 5: Define GAN parameters
+noise_dim = 100
+image_shape = (28, 28, 1)
+batch_size = 128
+epochs = 30
+
+# Step 6: Build the Generator
+generator = Sequential([
+    Dense(256, input_dim=noise_dim),
+    LeakyReLU(negative_slope=0.2),
+    BatchNormalization(),
+
+    Dense(512),
+    LeakyReLU(negative_slope=0.2),
+    BatchNormalization(),
+
+    Dense(1024),
+    LeakyReLU(negative_slope=0.2),
+    BatchNormalization(),
+
+    Dense(28 * 28, activation="tanh"),
+    Reshape(image_shape)
+], name="Generator")
+
+print("\nGENERATOR MODEL")
+generator.summary()
+
+# Step 7: Build the Discriminator
+discriminator = Sequential([
+    Flatten(input_shape=image_shape),
+
+    Dense(512),
+    LeakyReLU(negative_slope=0.2),
+
+    Dense(256),
+    LeakyReLU(negative_slope=0.2),
+
+    Dense(1, activation="sigmoid")
+], name="Discriminator")
+
+discriminator.compile(
+    optimizer=Adam(learning_rate=0.0002, beta_1=0.5),
+    loss="binary_crossentropy",
+    metrics=["accuracy"]
+)
+
+print("\nDISCRIMINATOR MODEL")
+discriminator.summary()
+
+# Step 8: Build the combined GAN
+discriminator.trainable = False
+
+gan = Sequential([
+    generator,
+    discriminator
+], name="GAN")
+
+gan.compile(
+    optimizer=Adam(learning_rate=0.0002, beta_1=0.5),
+    loss="binary_crossentropy"
+)
+
+print("\nGAN Model Created Successfully!")
+
+# Step 9: Function to generate and display images
+def generate_images(epoch, generator, examples=10):
+    noise = tf.random.normal((examples, noise_dim))
+    generated_images = generator(noise, training=False).numpy()
+
+    generated_images = (
+        generated_images * 127.5 + 127.5
+    ).clip(0, 255).astype("uint8")
+
+    plt.figure(figsize=(10, 4))
+
+    for i in range(examples):
+        plt.subplot(2, 5, i + 1)
+        plt.imshow(generated_images[i].reshape(28, 28),
+                   cmap="gray")
+        plt.axis("off")
+
+    plt.suptitle(f"Generated Images - Epoch {epoch}")
+    plt.tight_layout()
+    plt.show()
+
+# Step 10: Train the GAN
+real_labels = np.ones((batch_size, 1))
+fake_labels = np.zeros((batch_size, 1))
+
+generator_losses = []
+discriminator_losses = []
+
+print("\nGAN TRAINING STARTED!")
+
+for epoch in range(1, epochs + 1):
+
+    # Shuffle the training dataset
+    indices = np.random.permutation(len(X_train))
+    X_shuffled = X_train[indices]
+
+    d_losses = []
+    g_losses = []
+
+    # Train using mini-batches
+    for start in range(0, len(X_shuffled), batch_size):
+        real_images = X_shuffled[start:start + batch_size]
+        current_batch = len(real_images)
+
+        if current_batch == 0:
+            continue
+
+        # Generate random noise
+        noise = tf.random.normal(
+            (current_batch, noise_dim)
+        )
+
+        # Generate fake images
+        fake_images = generator(
+            noise, training=False
+        ).numpy()
+
+        # Prepare labels
+        real_y = np.ones((current_batch, 1))
+        fake_y = np.zeros((current_batch, 1))
+
+        # Train discriminator on real images
+        d_real = discriminator.train_on_batch(
+            real_images, real_y
+        )
+
+        # Train discriminator on fake images
+        d_fake = discriminator.train_on_batch(
+            fake_images, fake_y
+        )
+
+        # Average discriminator losses
+        d_loss = (
+            np.mean(d_real[0]) +
+            np.mean(d_fake[0])
+        ) / 2
+
+        # Train generator to fool discriminator
+        noise = tf.random.normal(
+            (current_batch, noise_dim)
+        )
+
+        misleading_labels = np.ones((current_batch, 1))
+
+        g_loss = gan.train_on_batch(
+            noise, misleading_labels
+        )
+
+        d_losses.append(d_loss)
+        g_losses.append(float(np.mean(g_loss)))
+
+    # Store average losses for this epoch
+    generator_losses.append(np.mean(g_losses))
+    discriminator_losses.append(np.mean(d_losses))
+
+    print(
+        f"Epoch {epoch}/{epochs} | "
+        f"D Loss: {discriminator_losses[-1]:.4f} | "
+        f"G Loss: {generator_losses[-1]:.4f}"
+    )
+
+    # Display generated images periodically
+    if epoch == 1 or epoch % 5 == 0:
+        generate_images(epoch, generator)
+
+print("\nGAN TRAINING COMPLETED!")
+
+# Step 11: Plot generator and discriminator losses
+plt.figure(figsize=(9, 5))
+
+plt.plot(
+    generator_losses,
+    label="Generator Loss"
+)
+
+plt.plot(
+    discriminator_losses,
+    label="Discriminator Loss"
+)
+
+plt.title("GAN Training Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Step 12: Generate final new images
+noise = tf.random.normal((16, noise_dim))
+
+new_images = generator(
+    noise, training=False
+).numpy()
+
+new_images = (
+    new_images * 127.5 + 127.5
+).clip(0, 255).astype("uint8")
+
+plt.figure(figsize=(8, 8))
+
+for i in range(16):
+    plt.subplot(4, 4, i + 1)
+    plt.imshow(new_images[i].reshape(28, 28), cmap="gray")
+    plt.axis("off")
+
+plt.suptitle("New Images Generated by GAN")
+plt.tight_layout()
+plt.show()
+
+# Step 13: Save generated images
+for i in range(16):
+    plt.imsave(
+        f"generated_digit_{i + 1}.png",
+        new_images[i].reshape(28, 28),
+        cmap="gray"
+    )
+
+# Step 14: Save trained models
+generator.save("gan_generator.keras")
+discriminator.save("gan_discriminator.keras")
+
+print("\nGenerated images saved successfully!")
+print("Generator model saved successfully!")
+print("Discriminator model saved successfully!")
+print("\nExperiment Completed Successfully!")
