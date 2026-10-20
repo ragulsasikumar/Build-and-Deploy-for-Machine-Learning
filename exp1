@@ -1,0 +1,193 @@
+
+# EXPERIMENT 1: SETTING UP ML ENVIRONMENT
+# AND PREPROCESSING DATA
+
+# Step 1: Import required libraries
+import sys
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import accuracy_score
+from sklearn.ensemble import RandomForestClassifier
+
+print("Python Version:", sys.version)
+print("NumPy Version:", np.__version__)
+print("Pandas Version:", pd.__version__)
+print("Machine Learning Environment Setup Completed!")
+
+# Step 2: Collect the dataset
+# Using the Iris dataset
+iris = load_iris()
+
+df = pd.DataFrame(
+    iris.data,
+    columns=iris.feature_names
+)
+
+df["Species"] = iris.target
+df["Species"] = df["Species"].map({
+    0: "Setosa",
+    1: "Versicolor",
+    2: "Virginica"
+})
+
+print("\nOriginal Dataset:")
+print(df.head())
+
+# Step 3: Display dataset information
+print("\nDataset Shape:")
+print(df.shape)
+
+print("\nDataset Information:")
+df.info()
+
+print("\nStatistical Summary:")
+print(df.describe())
+
+# Step 4: Check missing values
+print("\nMissing Values Before Cleaning:")
+print(df.isnull().sum())
+
+# Step 5: Introduce missing values
+# Demonstration of data cleaning
+df.loc[0, "sepal length (cm)"] = np.nan
+df.loc[5, "petal length (cm)"] = np.nan
+
+print("\nMissing Values After Demonstration:")
+print(df.isnull().sum())
+
+# Step 6: Handle missing numerical values
+numerical_columns = df.select_dtypes(
+    include=["number"]
+).columns
+
+imputer = SimpleImputer(strategy="mean")
+
+df[numerical_columns] = imputer.fit_transform(
+    df[numerical_columns]
+)
+
+print("\nMissing Values After Imputation:")
+print(df.isnull().sum())
+
+# Step 7: Remove duplicate records
+print("\nDuplicate Rows Before Removal:")
+print(df.duplicated().sum())
+
+df = df.drop_duplicates()
+
+print("\nDuplicate Rows After Removal:")
+print(df.duplicated().sum())
+
+# Step 8: Encode categorical target values
+encoder = LabelEncoder()
+
+df["Species"] = encoder.fit_transform(
+    df["Species"]
+)
+
+print("\nDataset After Label Encoding:")
+print(df.head())
+
+# Step 9: Separate features and target
+X = df.drop("Species", axis=1)
+y = df["Species"]
+
+print("\nFeature Data:")
+print(X.head())
+
+print("\nTarget Data:")
+print(y.head())
+
+# Step 10: Split the dataset
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+print("\nTraining Data Shape:", X_train.shape)
+print("Testing Data Shape:", X_test.shape)
+
+# Step 11: Scale numerical features
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+print("\nScaled Training Features:")
+print(pd.DataFrame(
+    X_train_scaled,
+    columns=X.columns
+).head())
+
+# Step 12: Visualize the dataset
+plt.figure(figsize=(8, 5))
+
+sns.scatterplot(
+    data=df,
+    x="sepal length (cm)",
+    y="petal length (cm)",
+    hue="Species",
+    palette="Set1"
+)
+
+plt.title("Iris Dataset Visualization")
+plt.xlabel("Sepal Length (cm)")
+plt.ylabel("Petal Length (cm)")
+plt.grid(True)
+plt.show()
+
+# Step 13: Check feature correlation
+plt.figure(figsize=(8, 5))
+
+sns.heatmap(
+    df.corr(),
+    annot=True,
+    cmap="coolwarm",
+    fmt=".2f"
+)
+
+plt.title("Feature Correlation Heatmap")
+plt.show()
+
+# Step 14: Train a machine learning model
+model = RandomForestClassifier(
+    n_estimators=100,
+    random_state=42
+)
+
+model.fit(X_train_scaled, y_train)
+
+# Step 15: Make predictions
+y_pred = model.predict(X_test_scaled)
+
+print("\nActual Values:")
+print(y_test.to_numpy())
+
+print("\nPredicted Values:")
+print(y_pred)
+
+# Step 16: Evaluate the model
+accuracy = accuracy_score(y_test, y_pred)
+
+print("\nModel Accuracy:", round(accuracy * 100, 2), "%")
+
+# Step 17: Display final processed dataset
+print("\nFinal Preprocessed Dataset:")
+print(df.head(10))
+
+print("\nFinal Dataset Shape:", df.shape)
+
+# Step 18: Save the processed dataset
+df.to_csv("preprocessed_iris.csv", index=False)
+
+print("\nPreprocessed dataset saved successfully!")
+print("Experiment Completed Successfully!")
