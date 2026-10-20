@@ -1,0 +1,158 @@
+
+# EXPERIMENT 3: CLASSIFICATION WITH DECISION TREES
+# Decision Tree Classifier and Model Evaluation
+
+# Step 1: Import required libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    classification_report
+)
+
+print("Libraries Imported Successfully!")
+
+# Step 2: Load the dataset
+iris = load_iris()
+
+X = pd.DataFrame(
+    iris.data,
+    columns=iris.feature_names
+)
+
+y = iris.target
+
+print("\nDataset Loaded Successfully!")
+print("\nFirst Five Rows:")
+print(X.head())
+
+print("\nDataset Shape:", X.shape)
+print("\nTarget Classes:", iris.target_names)
+
+# Step 3: Check the dataset
+print("\nDataset Information:")
+print(X.info())
+
+print("\nStatistical Summary:")
+print(X.describe())
+
+print("\nMissing Values:")
+print(X.isnull().sum())
+
+# Step 4: Split the dataset
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+print("\nTraining Data Shape:", X_train.shape)
+print("Testing Data Shape:", X_test.shape)
+
+# Step 5: Create the Decision Tree Classifier
+model = DecisionTreeClassifier(
+    criterion="gini",
+    max_depth=4,
+    random_state=42
+)
+
+print("\nDecision Tree Model Created Successfully!")
+
+# Step 6: Train the model
+model.fit(X_train, y_train)
+
+print("Model Training Completed!")
+
+# Step 7: Predict the test data
+y_pred = model.predict(X_test)
+
+print("\nActual Values:")
+print(y_test)
+
+print("\nPredicted Values:")
+print(y_pred)
+
+# Step 8: Calculate accuracy score
+accuracy = accuracy_score(y_test, y_pred)
+
+print("\nMODEL ACCURACY")
+print("Accuracy Score:", round(accuracy, 4))
+print("Accuracy Percentage:", round(accuracy * 100, 2), "%")
+
+# Step 9: Generate the confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+
+print("\nCONFUSION MATRIX")
+print(cm)
+
+# Step 10: Visualize the confusion matrix
+plt.figure(figsize=(7, 5))
+
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=iris.target_names,
+    yticklabels=iris.target_names
+)
+
+plt.title("Decision Tree Confusion Matrix")
+plt.xlabel("Predicted Class")
+plt.ylabel("Actual Class")
+plt.tight_layout()
+plt.show()
+
+# Step 11: Display classification report
+print("\nCLASSIFICATION REPORT")
+print(classification_report(
+    y_test,
+    y_pred,
+    target_names=iris.target_names
+))
+
+# Step 12: Visualize the Decision Tree
+plt.figure(figsize=(18, 10))
+
+plot_tree(
+    model,
+    feature_names=iris.feature_names,
+    class_names=iris.target_names,
+    filled=True,
+    rounded=True
+)
+
+plt.title("Decision Tree Classifier")
+plt.show()
+
+# Step 13: Predict a new sample
+new_sample = pd.DataFrame(
+    [[5.1, 3.5, 1.4, 0.2]],
+    columns=iris.feature_names
+)
+
+prediction = model.predict(new_sample)
+
+print("\nNEW SAMPLE PREDICTION")
+print("Predicted Species:", iris.target_names[prediction[0]])
+
+# Step 14: Compare actual and predicted values
+comparison = pd.DataFrame({
+    "Actual Class": iris.target_names[y_test],
+    "Predicted Class": iris.target_names[y_pred]
+})
+
+print("\nACTUAL VS PREDICTED")
+print(comparison.head(10))
+
+# Step 15: Display final result
+print("\nExperiment Completed Successfully!")
