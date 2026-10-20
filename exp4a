@@ -1,0 +1,185 @@
+
+# EXPERIMENT 4: SUPPORT VECTOR MACHINE (SVM)
+# Building an SVM Model for Classification Tasks
+
+# Step 1: Import required libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    classification_report
+)
+
+print("Libraries Imported Successfully!")
+
+# Step 2: Load the dataset
+data = load_breast_cancer()
+
+X = pd.DataFrame(
+    data.data,
+    columns=data.feature_names
+)
+
+y = data.target
+
+print("\nDataset Loaded Successfully!")
+print("\nFirst Five Rows:")
+print(X.head())
+
+print("\nDataset Shape:", X.shape)
+print("\nTarget Classes:", data.target_names)
+
+# Step 3: Explore the dataset
+print("\nDataset Information:")
+X.info()
+
+print("\nStatistical Summary:")
+print(X.describe())
+
+print("\nMissing Values:")
+print(X.isnull().sum().sum())
+
+# Step 4: Split the dataset into training and testing data
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+print("\nTraining Data Shape:", X_train.shape)
+print("Testing Data Shape:", X_test.shape)
+
+# Step 5: Standardize the features
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+print("\nFeature Scaling Completed!")
+
+# Step 6: Create the SVM model
+svm_model = SVC(
+    kernel="rbf",
+    C=1.0,
+    gamma="scale"
+)
+
+print("\nSVM Model Created Successfully!")
+
+# Step 7: Train the model
+svm_model.fit(X_train_scaled, y_train)
+
+print("SVM Model Training Completed!")
+
+# Step 8: Predict the test data
+y_pred = svm_model.predict(X_test_scaled)
+
+print("\nActual Values:")
+print(y_test)
+
+print("\nPredicted Values:")
+print(y_pred)
+
+# Step 9: Evaluate model accuracy
+accuracy = accuracy_score(y_test, y_pred)
+
+print("\nMODEL EVALUATION")
+print("Accuracy Score:", round(accuracy, 4))
+print("Accuracy Percentage:", round(accuracy * 100, 2), "%")
+
+# Step 10: Generate the confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+
+print("\nCONFUSION MATRIX")
+print(cm)
+
+# Step 11: Visualize the confusion matrix
+plt.figure(figsize=(7, 5))
+
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=data.target_names,
+    yticklabels=data.target_names
+)
+
+plt.title("SVM Confusion Matrix")
+plt.xlabel("Predicted Class")
+plt.ylabel("Actual Class")
+plt.tight_layout()
+plt.show()
+
+# Step 12: Display classification report
+print("\nCLASSIFICATION REPORT")
+
+print(classification_report(
+    y_test,
+    y_pred,
+    target_names=data.target_names
+))
+
+# Step 13: Train another SVM using a linear kernel
+linear_svm = SVC(kernel="linear")
+
+linear_svm.fit(X_train_scaled, y_train)
+
+linear_pred = linear_svm.predict(X_test_scaled)
+
+linear_accuracy = accuracy_score(
+    y_test,
+    linear_pred
+)
+
+print("\nLINEAR SVM RESULTS")
+print("Linear SVM Accuracy:",
+      round(linear_accuracy * 100, 2), "%")
+
+# Step 14: Compare SVM kernels
+results = pd.DataFrame({
+    "SVM Kernel": ["RBF", "Linear"],
+    "Accuracy (%)": [
+        accuracy * 100,
+        linear_accuracy * 100
+    ]
+})
+
+print("\nSVM KERNEL COMPARISON")
+print(results.round(2))
+
+plt.figure(figsize=(7, 5))
+
+sns.barplot(
+    data=results,
+    x="SVM Kernel",
+    y="Accuracy (%)"
+)
+
+plt.title("SVM Kernel Accuracy Comparison")
+plt.ylim(0, 105)
+plt.tight_layout()
+plt.show()
+
+# Step 15: Predict a sample from the test dataset
+sample = X_test.iloc[[0]]
+sample_scaled = scaler.transform(sample)
+
+sample_prediction = svm_model.predict(sample_scaled)
+
+print("\nSAMPLE PREDICTION")
+print("Predicted Class:",
+      data.target_names[sample_prediction[0]])
+
+# Step 16: Display final result
+print("\nSVM Classification Completed Successfully!")
