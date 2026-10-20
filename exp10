@@ -1,0 +1,246 @@
+import os, zipfile, textwrap
+base = "/mnt/data/house_price_mini_project"
+os.makedirs(base, exist_ok=True)
+files = {
+"app.py": r'''from flask import Flask, request, jsonify, render_template
+import joblib
+import numpy as np
+
+app = Flask(__name__)
+model = joblib.load("house_price_model.pkl")
+
+FEATURES = [
+    "MedInc", "HouseAge", "AveRooms", "AveBedrms",
+    "Population", "AveOccup", "Latitude", "Longitude"
+]
+
+@app.route("/", methods=["GET"])
+def home():
+    return render_template("index.html")
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    try:
+        data = request.get_json(silent=True) if request.is_json else request.form
+        values = [float(data[name]) for name in FEATURES]
+        prediction = float(model.predict(np.array(values).reshape(1, -1))[0])
+        # California Housing target is measured in units of $100,000.
+        price_usd = max(0, prediction) * 100000
+        return jsonify({
+            "predicted_price_usd": round(price_usd, 2),
+            "predicted_price_lakhs_inr_approx": round(price_usd * 83 / 100000, 2),
+            "note": "INR estimate uses a fixed illustrative exchange rate of 1 USD = 83 INR."
+        })
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify({"error": "Enter valid numeric values for all eight fields.", "details": str(exc)}), 400
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=False)
+''',
+"train_model.py": r'''import joblib
+import numpy as np
+from sklearn.datasets import fetch_california_housing
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.pipeline import Pipeline
+
+print("Downloading/loading California Housing dataset...")
+data = fetch_california_housing(as_frame=True)
+X = data.data.copy()
+y = data.target.copy()  # Target is in units of $100,000.
+
+# Basic data preparation: replace impossible infinite values and impute missing values.
+X = X.replace([np.inf, -np.inf], np.nan)
+print("Missing values before preprocessing:", int(X.isna().sum().sum()))
+
+# Feature engineering: create population-per-room ratio.
+X["PopulationPerRoom"] = X["Population"] / X["AveRooms"].replace(0, np.nan)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="median")),
+    ("model", RandomForestRegressor(random_state=42, n_jobs=-1))
+])
+
+# Small grid keeps the example manageable; increase values for a more extensive search.
+params = {
+    "model__n_estimators": [100],
+    "model__max_depth": [12, None],
+    "model__min_samples_leaf": [1, 2]
+}
+
+search = GridSearchCV(
+    pipeline, params, cv=3, scoring="neg_mean_absolute_error",
+    n_jobs=-1, verbose=1
+)
+search.fit(X_train, y_train)
+best_model = search.best_estimator_
+
+pred = best_model.predict(X_test)
+mae = mean_absolute_error(y_test, pred)
+rmse = np.sqrt(mean_squared_error(y_test, pred))
+r2 = r2_score(y_test, pred)
+
+print("\nBest parameters:", search.best_params_)
+print(f"MAE:  {mae:.4f} (units of $100,000)")
+print(f"RMSE: {rmse:.4f} (units of $100,000)")
+print(f"R²:   {r2:.4f}")
+print(f"Approximate MAE in USD: ${mae * 100000:,.0f}")
+
+joblib.dump(best_model, "house_price_model.pkl")
+print("\nSaved model to house_price_model.pkl")
+print("Model input fields:", list(X.columns))
+''',
+"requirements.txt": '''Flask>=3.0,<4
+scikit-learn>=1.4
+pandas>=2.0
+numpy>=1.24
+joblib>=1.3
+''',
+"Dockerfile": '''FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py train_model.py ./
+COPY templates ./templates
+RUN python train_model.py
+EXPOSE 5000
+CMD ["python", "app.py"]
+''',
+"README.md": r'''# House Price Prediction Mini Project
+
+## Features
+- California Housing dataset
+- Missing-value preprocessing and feature engineering
+- Random Forest regression
+- GridSearchCV hyperparameter tuning
+- MAE, RMSE and R² evaluation
+- Flask REST API and HTML frontend
+- Docker containerization
+
+## Run locally
+Use Python 3.11 or 3.12 for best compatibility.
+
+```bash
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
+pip install -r requirements.txt
+python train_model.py
+python app.py
+```
+
+Open http://127.0.0.1:5000
+
+## REST API test
+Send POST JSON to http://127.0.0.1:5000/predict:
+
+```json
+{
+  "MedInc": 5.0,
+  "HouseAge": 25,
+  "AveRooms": 5.0,
+  "AveBedrms": 1.0,
+  "Population": 1000,
+  "AveOccup": 3.0,
+  "Latitude": 34.05,
+  "Longitude": -118.25
+}
+```
+
+Note: The web form/API uses the eight original California Housing features. The training script adds PopulationPerRoom as an engineered feature; to avoid a feature mismatch, the pipeline needs the engineered feature during prediction. See the updated app.py note below.
+''',
+"templates/index.html": r'''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>House Price Prediction</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 760px; margin: 30px auto; padding: 0 16px; color: #222; }
+    h1 { margin-bottom: 8px; }
+    p { color: #555; }
+    form { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 22px; }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+    input { padding: 10px; border: 1px solid #bbb; border-radius: 6px; font-size: 15px; }
+    button { grid-column: 1 / -1; padding: 12px; border: 0; border-radius: 6px; background: #2257a5; color: white; font-size: 16px; cursor: pointer; }
+    #result { margin-top: 20px; padding: 14px; background: #f2f5fa; border-radius: 6px; white-space: pre-wrap; }
+    small { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>House Price Prediction</h1>
+  <p>Enter the property and location details. This demo model was trained on California housing data.</p>
+  <form id="predictionForm">
+    <label>Median income (MedInc)<input name="MedInc" type="number" step="any" value="5.0" required></label>
+    <label>House age in years<input name="HouseAge" type="number" step="any" value="25" required></label>
+    <label>Average rooms<input name="AveRooms" type="number" step="any" value="5.0" min="0.01" required></label>
+    <label>Average bedrooms<input name="AveBedrms" type="number" step="any" value="1.0" required></label>
+    <label>Population<input name="Population" type="number" step="any" value="1000" required></label>
+    <label>Average household occupancy<input name="AveOccup" type="number" step="any" value="3.0" required></label>
+    <label>Latitude<input name="Latitude" type="number" step="any" value="34.05" required></label>
+    <label>Longitude<input name="Longitude" type="number" step="any" value="-118.25" required></label>
+    <button type="submit">Predict Price</button>
+  </form>
+  <div id="result" role="status">Prediction will appear here.</div>
+  <small>Educational estimate only; not a professional property valuation. INR estimate uses an illustrative fixed exchange rate.</small>
+  <script>
+    const form = document.getElementById("predictionForm");
+    const result = document.getElementById("result");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(form).entries());
+      for (const key in payload) payload[key] = Number(payload[key]);
+      result.textContent = "Predicting...";
+      try {
+        const response = await fetch("/predict", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Prediction failed");
+        result.textContent =
+          "Predicted price: $" + data.predicted_price_usd.toLocaleString("en-US") +
+          "\nApprox. INR: ₹" + data.predicted_price_lakhs_inr_approx.toLocaleString("en-IN") + " lakh";
+      } catch (error) {
+        result.textContent = "Error: " + error.message;
+      }
+    });
+  </script>
+</body>
+</html>
+'''
+}
+# Fix feature engineering mismatch by deriving PopulationPerRoom in API too
+files["app.py"] = files["app.py"].replace(
+'''    values = [float(data[name]) for name in FEATURES]
+        prediction = float(model.predict(np.array(values).reshape(1, -1))[0])''',
+'''    values = [float(data[name]) for name in FEATURES]
+        # Match the engineered feature created during training.
+        engineered = values[4] / values[2] if values[2] != 0 else 0.0
+        row = np.array(values + [engineered]).reshape(1, -1)
+        prediction = float(model.predict(row)[0])'''
+)
+# Check indentation string replacement likely expected exact; write files
+for name, content in files.items():
+    path = os.path.join(base, name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+# Update README caveat to clarify engineered feature is handled in API
+readme_path = os.path.join(base, "README.md")
+with open(readme_path, encoding="utf-8") as f: readme = f.read()
+readme = readme.replace('''Note: The web form/API uses the eight original California Housing features. The training script adds PopulationPerRoom as an engineered feature; to avoid a feature mismatch, the pipeline needs the engineered feature during prediction. See the updated app.py note below.''',
+'''The API calculates `PopulationPerRoom` from Population / AveRooms, matching the engineered feature used during training.''')
+with open(readme_path, "w", encoding="utf-8") as f: f.write(readme)
+# verify app snippet
+print(open(os.path.join(base,"app.py"), encoding="utf-8").read())
