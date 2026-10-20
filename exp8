@@ -1,0 +1,298 @@
+
+# EXPERIMENT 9: MODEL EVALUATION AND IMPROVEMENT
+# Grid Search Hyperparameter Tuning and K-Fold Cross-Validation
+
+# Step 1: Import required libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.datasets import load_iris
+from sklearn.model_selection import (
+    train_test_split,
+    GridSearchCV,
+    KFold,
+    cross_val_score
+)
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    classification_report
+)
+
+print("Libraries Imported Successfully!")
+
+# ==================================================
+# PART A: LOAD AND EXPLORE DATASET
+# ==================================================
+
+# Step 2: Load Iris dataset
+iris = load_iris()
+
+X = pd.DataFrame(
+    iris.data,
+    columns=iris.feature_names
+)
+
+y = iris.target
+
+print("\nDataset Loaded Successfully!")
+print("\nFirst Five Rows:")
+print(X.head())
+
+print("\nDataset Shape:", X.shape)
+print("\nTarget Classes:", iris.target_names)
+
+print("\nStatistical Summary:")
+print(X.describe())
+
+# ==================================================
+# PART B: SPLIT DATASET
+# ==================================================
+
+# Step 3: Divide data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+print("\nTraining Data Shape:", X_train.shape)
+print("Testing Data Shape:", X_test.shape)
+
+# ==================================================
+# PART C: GRID SEARCH HYPERPARAMETER TUNING
+# ==================================================
+
+# Step 4: Create an SVM pipeline
+pipeline = Pipeline([
+    ("scaler", StandardScaler()),
+    ("svm", SVC())
+])
+
+# Step 5: Define hyperparameters
+param_grid = {
+    "svm__C": [0.1, 1, 10, 100],
+    "svm__kernel": ["linear", "rbf"],
+    "svm__gamma": ["scale", "auto"]
+}
+
+print("\nHyperparameter Grid:")
+print(param_grid)
+
+# Step 6: Create Grid Search
+grid_search = GridSearchCV(
+    estimator=pipeline,
+    param_grid=param_grid,
+    cv=5,
+    scoring="accuracy",
+    n_jobs=-1
+)
+
+# Step 7: Train Grid Search
+grid_search.fit(X_train, y_train)
+
+print("\nGRID SEARCH RESULTS")
+print("Best Parameters:")
+print(grid_search.best_params_)
+
+print("\nBest Cross-Validation Accuracy:")
+print(round(grid_search.best_score_ * 100, 2), "%")
+
+# Step 8: Display all parameter combinations
+grid_results = pd.DataFrame(
+    grid_search.cv_results_
+)
+
+print("\nGrid Search Results:")
+print(
+    grid_results[
+        [
+            "param_svm__C",
+            "param_svm__kernel",
+            "param_svm__gamma",
+            "mean_test_score",
+            "rank_test_score"
+        ]
+    ].sort_values("rank_test_score").head(10)
+)
+
+# Step 9: Evaluate the best model on test data
+best_model = grid_search.best_estimator_
+
+y_pred = best_model.predict(X_test)
+
+accuracy = accuracy_score(y_test, y_pred)
+
+print("\nBEST MODEL TEST RESULTS")
+print("Test Accuracy:", round(accuracy * 100, 2), "%")
+
+print("\nClassification Report:")
+print(classification_report(
+    y_test,
+    y_pred,
+    target_names=iris.target_names
+))
+
+# Step 10: Plot confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+
+plt.figure(figsize=(7, 5))
+
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=iris.target_names,
+    yticklabels=iris.target_names
+)
+
+plt.title("Confusion Matrix - Best SVM")
+plt.xlabel("Predicted Class")
+plt.ylabel("Actual Class")
+plt.tight_layout()
+plt.show()
+
+# ==================================================
+# PART D: K-FOLD CROSS-VALIDATION
+# ==================================================
+
+# Step 11: Create K-Fold cross-validation
+kfold = KFold(
+    n_splits=5,
+    shuffle=True,
+    random_state=42
+)
+
+print("\nK-FOLD CROSS-VALIDATION")
+
+# Step 12: Evaluate tuned SVM using K-Fold
+svm_scores = cross_val_score(
+    best_model,
+    X,
+    y,
+    cv=kfold,
+    scoring="accuracy",
+    n_jobs=-1
+)
+
+print("\nSVM Fold Accuracies:")
+print(np.round(svm_scores * 100, 2))
+
+print("Mean SVM Accuracy:",
+      round(svm_scores.mean() * 100, 2), "%")
+
+print("Standard Deviation:",
+      round(svm_scores.std() * 100, 2), "%")
+
+# ==================================================
+# PART E: RANDOM FOREST CROSS-VALIDATION
+# ==================================================
+
+# Step 13: Create Random Forest model
+rf_model = RandomForestClassifier(
+    n_estimators=100,
+    random_state=42
+)
+
+# Step 14: Perform K-Fold cross-validation
+rf_scores = cross_val_score(
+    rf_model,
+    X,
+    y,
+    cv=kfold,
+    scoring="accuracy",
+    n_jobs=-1
+)
+
+print("\nRANDOM FOREST CROSS-VALIDATION")
+print("Fold Accuracies:")
+print(np.round(rf_scores * 100, 2))
+
+print("Mean RF Accuracy:",
+      round(rf_scores.mean() * 100, 2), "%")
+
+print("Standard Deviation:",
+      round(rf_scores.std() * 100, 2), "%")
+
+# ==================================================
+# PART F: COMPARE MODEL PERFORMANCE
+# ==================================================
+
+# Step 15: Create comparison table
+comparison = pd.DataFrame({
+    "Fold": [1, 2, 3, 4, 5],
+    "Tuned SVM (%)": svm_scores * 100,
+    "Random Forest (%)": rf_scores * 100
+})
+
+print("\nMODEL PERFORMANCE COMPARISON")
+print(comparison.round(2))
+
+# Step 16: Plot cross-validation scores
+plt.figure(figsize=(9, 5))
+
+plt.plot(
+    range(1, 6),
+    svm_scores * 100,
+    marker="o",
+    label="Tuned SVM"
+)
+
+plt.plot(
+    range(1, 6),
+    rf_scores * 100,
+    marker="s",
+    label="Random Forest"
+)
+
+plt.title("K-Fold Cross-Validation Comparison")
+plt.xlabel("Fold Number")
+plt.ylabel("Accuracy (%)")
+plt.xticks(range(1, 6))
+plt.ylim(0, 105)
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Step 17: Compare average accuracy
+models = ["Tuned SVM", "Random Forest"]
+mean_scores = [
+    svm_scores.mean() * 100,
+    rf_scores.mean() * 100
+]
+
+plt.figure(figsize=(7, 5))
+
+plt.bar(models, mean_scores)
+
+plt.title("Average K-Fold Accuracy")
+plt.ylabel("Accuracy (%)")
+plt.ylim(0, 105)
+plt.grid(axis="y")
+plt.show()
+
+# ==================================================
+# PART G: FINAL SUMMARY
+# ==================================================
+
+print("\nFINAL SUMMARY")
+print("Best SVM Parameters:", grid_search.best_params_)
+print("Best Grid Search CV Accuracy:",
+      round(grid_search.best_score_ * 100, 2), "%")
+print("SVM Test Accuracy:",
+      round(accuracy * 100, 2), "%")
+print("SVM Mean K-Fold Accuracy:",
+      round(svm_scores.mean() * 100, 2), "%")
+print("Random Forest Mean K-Fold Accuracy:",
+      round(rf_scores.mean() * 100, 2), "%")
+
+print("\nExperiment Completed Successfully!")
