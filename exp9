@@ -1,0 +1,31 @@
+# Install required libraries first:
+# pip install flask scikit-learn requests
+
+from flask import Flask, request, jsonify
+from sklearn.datasets import load_iris
+from sklearn.ensemble import RandomForestClassifier
+
+# Load dataset and train model
+iris = load_iris()
+model = RandomForestClassifier(random_state=42)
+model.fit(iris.data, iris.target)
+
+# Create Flask API
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Machine Learning REST API is running!"
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    data = request.get_json()
+    prediction = model.predict([data["features"]])[0]
+    return jsonify({
+        "prediction": iris.target_names[prediction]
+    })
+
+if __name__ == "__main__":
+    print("Model trained successfully!")
+    print("API running at http://127.0.0.1:5000")
+    app.run(host="0.0.0.0", port=5000)
